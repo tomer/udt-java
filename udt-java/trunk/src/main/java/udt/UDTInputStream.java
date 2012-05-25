@@ -78,9 +78,19 @@ public class UDTInputStream extends InputStream {
 	@Override
 	public int read()throws IOException{
 		int b=0;
-		while(b==0)
+		while(b==0){
 			b=read(single);
-
+			if(b==0){
+				try{
+					while(receiveBuffer.isEmpty()){
+						Thread.sleep(20);
+					}
+				}catch(InterruptedException ie){
+					throw new IOException(ie);
+				}
+			}
+		}
+		
 		if(b>0){
 			return single[0] & 0xFF;
 		}
@@ -153,9 +163,7 @@ public class UDTInputStream extends InputStream {
 				else currentChunk=receiveBuffer.poll(10, TimeUnit.MILLISECONDS);
 				
 			}catch(InterruptedException ie){
-				IOException ex=new IOException();
-				ex.initCause(ie);
-				throw ex;
+				throw new IOException(ie);
 			}
 			return;
 		}

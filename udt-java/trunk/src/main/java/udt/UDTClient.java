@@ -80,12 +80,11 @@ public class UDTClient {
 		//create client session...
 		clientSession=new ClientSession(clientEndpoint,destination);
 		clientEndpoint.addSession(clientSession.getSocketID(), clientSession);
-
 		clientEndpoint.start();
 		clientSession.connect();
 		//wait for handshake
 		while(!clientSession.isReady()){
-			Thread.sleep(5);
+			Thread.sleep(50);
 		}
 		logger.info("The UDTClient is connected");
 	}

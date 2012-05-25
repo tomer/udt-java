@@ -31,6 +31,8 @@
  *********************************************************************************/
 
 package udt.packets;
+import java.io.IOException;
+
 import udt.UDTPacket;
 import udt.packets.ControlPacket.*;
 
@@ -42,13 +44,13 @@ public class PacketFactory {
 	 * @param packetData
 	 * @return
 	 */
-	public static UDTPacket createPacket(byte[]encodedData){
+	public static UDTPacket createPacket(byte[]encodedData)throws IOException{
 		boolean isControl=(encodedData[0]&128) !=0 ;
 		if(isControl)return createControlPacket(encodedData,encodedData.length);
 		return new DataPacket(encodedData);
 	}
 	
-	public static UDTPacket createPacket(byte[]encodedData,int length){
+	public static UDTPacket createPacket(byte[]encodedData,int length)throws IOException{
 		boolean isControl=(encodedData[0]&128) !=0 ;
 		if(isControl)return createControlPacket(encodedData,length);
 		return new DataPacket(encodedData,length);
@@ -59,7 +61,7 @@ public class PacketFactory {
 	 * @param packetData
 	 * @return
 	 */
-	public static ControlPacket createControlPacket(byte[]encodedData,int length){
+	public static ControlPacket createControlPacket(byte[]encodedData,int length)throws IOException{
 	
 		ControlPacket packet=null;
 		

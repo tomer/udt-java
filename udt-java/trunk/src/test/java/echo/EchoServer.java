@@ -78,7 +78,7 @@ public class EchoServer implements Runnable{
 				String line=readLine(in);
 				if(line!=null){
 					System.out.println("ECHO: "+line);
-					//else echo back the line
+					//echo back the line
 					writer.println(line);
 					writer.flush();
 				}

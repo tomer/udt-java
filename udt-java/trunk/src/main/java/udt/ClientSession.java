@@ -52,6 +52,8 @@ public class ClientSession extends UDTSession {
 
 	private UDPEndPoint endPoint;
 
+	long initialSequenceNo=SequenceNumber.random();
+	
 	public ClientSession(UDPEndPoint endPoint, Destination dest)throws SocketException{
 		super("ClientSession localPort="+endPoint.getLocalPort(),dest);
 		this.endPoint=endPoint;
@@ -60,7 +62,7 @@ public class ClientSession extends UDTSession {
 
 	/**
 	 * send connection handshake until a reply from server is received
-	 * TODO check for timeout
+	 
 	 * @throws InterruptedException
 	 * @throws IOException
 	 */
@@ -68,11 +70,21 @@ public class ClientSession extends UDTSession {
 	public void connect() throws InterruptedException,IOException{
 		int n=0;
 		while(getState()!=ready){
-			sendHandShake();
 			if(getState()==invalid)throw new IOException("Can't connect!");
-			n++;
-			if(getState()!=ready)Thread.sleep(500);
+			if(getState()<=handshaking){
+				setState(handshaking);
+				sendInitialHandShake();
+			}
+			else if(getState()==handshaking+1){
+				sendSecondHandshake();
+			}
+			
+			if(getState()==invalid)throw new IOException("Can't connect!");
+			if(n++ > 10)throw new IOException("Could not connect to server within the timeout.");
+			
+			Thread.sleep(500);
 		}
+		Thread.sleep(1000);
 		cc.init();
 		logger.info("Connected, "+n+" handshake packets sent");		
 	}
@@ -82,38 +94,10 @@ public class ClientSession extends UDTSession {
 
 		lastPacket=packet;
 
-		if (packet instanceof ConnectionHandshake) {
+		if (packet.isConnectionHandshake()) {
 			ConnectionHandshake hs=(ConnectionHandshake)packet;
-
-			logger.info("Received connection handshake from "+peer+"\n"+hs);
-
-			if (getState()!=ready) {
-				if(hs.getConnectionType()==1){
-					try{
-						//TODO validate parameters sent by peer
-						long peerSocketID=hs.getSocketID();
-						destination.setSocketID(peerSocketID);
-						sendConfirmation(hs);
-					}catch(Exception ex){
-						logger.log(Level.WARNING,"Error creating socket",ex);
-						setState(invalid);
-					}
-					return;
-				}
-				else{
-					try{
-						//TODO validate parameters sent by peer
-						long peerSocketID=hs.getSocketID();
-						destination.setSocketID(peerSocketID);
-						setState(ready);
-						socket=new UDTSocket(endPoint,this);		
-					}catch(Exception ex){
-						logger.log(Level.WARNING,"Error creating socket",ex);
-						setState(invalid);
-					}
-					return;
-				}
-			}
+			handleConnectionHandshake(hs,peer);
+			return;
 		}
 
 		if(getState() == ready) {
@@ -140,9 +124,43 @@ public class ClientSession extends UDTSession {
 		}
 	}
 
+	protected void handleConnectionHandshake(ConnectionHandshake hs, Destination peer){
 
-	//handshake for connect
-	protected void sendHandShake()throws IOException{
+		if (getState()==handshaking) {
+			logger.info("Received initial handshake response from "+peer+"\n"+hs);
+			if(hs.getConnectionType()==ConnectionHandshake.CONNECTION_SERVER_ACK){
+				try{
+					//TODO validate parameters sent by peer
+					long peerSocketID=hs.getSocketID();
+					sessionCookie=hs.getCookie();
+					destination.setSocketID(peerSocketID);
+					setState(handshaking+1);
+				}catch(Exception ex){
+					logger.log(Level.WARNING,"Error creating socket",ex);
+					setState(invalid);
+				}
+				return;
+			}
+			else{
+				logger.info("Unexpected type of handshake packet received");
+				setState(invalid);
+			}
+		}
+		else if(getState()==handshaking+1){
+			try{
+				logger.info("Received confirmation handshake response from "+peer+"\n"+hs);
+				//TODO validate parameters sent by peer
+				setState(ready);
+				socket=new UDTSocket(endPoint,this);
+			}catch(Exception ex){
+				logger.log(Level.WARNING,"Error creating socket",ex);
+				setState(invalid);
+			}
+		}
+	}
+
+	//initial handshake for connect
+	protected void sendInitialHandShake()throws IOException{
 		ConnectionHandshake handshake = new ConnectionHandshake();
 		handshake.setConnectionType(ConnectionHandshake.CONNECTION_TYPE_REGULAR);
 		handshake.setSocketType(ConnectionHandshake.SOCKET_TYPE_DGRAM);
@@ -153,20 +171,24 @@ public class ClientSession extends UDTSession {
 		handshake.setSocketID(mySocketID);
 		handshake.setMaxFlowWndSize(flowWindowSize);
 		handshake.setSession(this);
+		handshake.setAddress(endPoint.getLocalAddress());
 		logger.info("Sending "+handshake);
 		endPoint.doSend(handshake);
 	}
 
 	//2nd handshake for connect
-	protected void sendConfirmation(ConnectionHandshake hs)throws IOException{
+	protected void sendSecondHandshake()throws IOException{
 		ConnectionHandshake handshake = new ConnectionHandshake();
-		handshake.setConnectionType(-1);
+		handshake.setConnectionType(ConnectionHandshake.CONNECTION_TYPE_REGULAR);
 		handshake.setSocketType(ConnectionHandshake.SOCKET_TYPE_DGRAM);
-		handshake.setInitialSeqNo(hs.getInitialSeqNo());
-		handshake.setPacketSize(hs.getPacketSize());
+		handshake.setInitialSeqNo(initialSequenceNo);
+		handshake.setPacketSize(getDatagramSize());
 		handshake.setSocketID(mySocketID);
 		handshake.setMaxFlowWndSize(flowWindowSize);
 		handshake.setSession(this);
+		handshake.setCookie(sessionCookie);
+		handshake.setAddress(endPoint.getLocalAddress());
+		handshake.setDestinationID(getDestination().getSocketID());
 		logger.info("Sending confirmation "+handshake);
 		endPoint.doSend(handshake);
 	}

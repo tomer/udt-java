@@ -101,7 +101,6 @@ public class TestUDTInputStream extends UDTTestBase{
 				try{
 					for(int i=0;i<blocks.length;i++){
 						while(!is.haveNewData(i+1, blocks[i])){
-							Thread.yield();
 							Thread.sleep(100);
 						}
 					}

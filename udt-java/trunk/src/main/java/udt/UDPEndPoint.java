@@ -40,6 +40,8 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.SynchronousQueue;
@@ -70,10 +72,12 @@ public class UDPEndPoint {
 	//last received packet
 	private UDTPacket lastPacket;
 
+	private final Map<Destination,UDTSession> sessionsBeingConnected=Collections.synchronizedMap(new HashMap<Destination,UDTSession>());
+
 	//if the endpoint is configured for a server socket,
 	//this queue is used to handoff new UDTSessions to the application
 	private final SynchronousQueue<UDTSession> sessionHandoff=new SynchronousQueue<UDTSession>();
-	
+
 	private boolean serverSocketMode=false;
 
 	//has the endpoint been stopped?
@@ -90,7 +94,7 @@ public class UDPEndPoint {
 		this.dgSocket=socket;
 		port=dgSocket.getLocalPort();
 	}
-	
+
 	/**
 	 * bind to any local port on the given host address
 	 * @param localAddress
@@ -116,7 +120,7 @@ public class UDPEndPoint {
 		}
 		if(localPort>0)this.port = localPort;
 		else port=dgSocket.getLocalPort();
-		
+
 		configureSocket();
 	}
 
@@ -127,7 +131,7 @@ public class UDPEndPoint {
 		dgSocket.setReceiveBufferSize(128*1024);
 		dgSocket.setReuseAddress(false);
 	}
-	
+
 	/**
 	 * bind to the default network interface on the machine
 	 * 
@@ -240,77 +244,73 @@ public class UDPEndPoint {
 	 * </ul> 
 	 * @throws IOException
 	 */
-	private long lastDestID=-1;
-	private UDTSession lastSession;
-	
-	private int n=0;
-	
-	private final Object lock=new Object();
-	
 	protected void doReceive()throws IOException{
 		while(!stopped){
 			try{
-				try{
-					
-					//will block until a packet is received or timeout has expired
-					dgSocket.receive(dp);
-					
-					Destination peer=new Destination(dp.getAddress(), dp.getPort());
-					int l=dp.getLength();
-					UDTPacket packet=PacketFactory.createPacket(dp.getData(),l);
-					lastPacket=packet;
+				//will block until a packet is received or timeout has expired
+				dgSocket.receive(dp);
 
-					//handle connection handshake 
-					if(packet.isConnectionHandshake()){
-						synchronized(lock){
-							Long id=Long.valueOf(packet.getDestinationID());
-							UDTSession session=sessions.get(id);
-							if(session==null){
-								session=new ServerSession(dp,this);
-								addSession(session.getSocketID(),session);
-								//TODO need to check peer to avoid duplicate server session
-								if(serverSocketMode){
-									logger.fine("Pooling new request.");
-									sessionHandoff.put(session);
-									logger.fine("Request taken for processing.");
-								}
-							}
-							peer.setSocketID(((ConnectionHandshake)packet).getSocketID());
-							session.received(packet,peer);
-						}
-					}
-					else{
-						//dispatch to existing session
-						long dest=packet.getDestinationID();
-						UDTSession session;
-						if(dest==lastDestID){
-							session=lastSession;
-						}
-						else{
-							session=sessions.get(dest);
-							lastSession=session;
-							lastDestID=dest;
-						}
-						if(session==null){
-							n++;
-							if(n%100==1){
-								logger.warning("Unknown session <"+dest+"> requested from <"+peer+"> packet type "+packet.getClass().getName());
-							}
-						}
-						else{
-							session.received(packet,peer);
-						}
-					}
-				}catch(SocketException ex){
-					logger.log(Level.INFO, "SocketException: "+ex.getMessage());
-				}catch(SocketTimeoutException ste){
-					//can safely ignore... we will retry until the endpoint is stopped
+				Destination peer=new Destination(dp.getAddress(), dp.getPort());
+				int l=dp.getLength();
+				UDTPacket packet=PacketFactory.createPacket(dp.getData(),l);
+				lastPacket=packet;
+
+				long dest=packet.getDestinationID();
+				UDTSession session=sessions.get(dest);
+				if(session!=null){
+					//dispatch to existing session
+					session.received(packet,peer);
 				}
-
+				else if(packet.isConnectionHandshake()){
+					connectionHandshake((ConnectionHandshake)packet, peer);
+				}
+				else{
+					logger.warning("Unknown session <"+dest+"> requested from <"+peer+"> packet type "+packet.getClass().getName());
+				}
+			}catch(SocketException ex){
+				logger.log(Level.INFO, "SocketException: "+ex.getMessage());
+			}catch(SocketTimeoutException ste){
+				//can safely ignore... we will retry until the endpoint is stopped
 			}catch(Exception ex){
 				logger.log(Level.WARNING, "Got: "+ex.getMessage(),ex);
 			}
 		}
+	}
+
+	/**
+	 * called when a "connection handshake" packet was received and no 
+	 * matching session yet exists
+	 * 
+	 * @param packet
+	 * @param peer
+	 * @throws IOException
+	 * @throws InterruptedException
+	 */
+	protected synchronized void connectionHandshake(ConnectionHandshake packet, Destination peer)throws IOException, InterruptedException{
+		Destination p=new Destination(peer.getAddress(),peer.getPort());
+		UDTSession session=sessionsBeingConnected.get(peer);
+		long destID=packet.getDestinationID();
+		if(session!=null && session.getSocketID()==destID){
+			//confirmation handshake
+			sessionsBeingConnected.remove(p);
+			addSession(destID, session);
+		}
+		else if(session==null){
+			session=new ServerSession(peer,this);
+			sessionsBeingConnected.put(p,session);
+			sessions.put(session.getSocketID(), session);
+			if(serverSocketMode){
+				logger.fine("Pooling new request.");
+				sessionHandoff.put(session);
+				logger.fine("Request taken for processing.");
+			}
+		}
+		else {
+			throw new IOException("dest ID sent by client does not match");
+		}
+		Long peerSocketID=((ConnectionHandshake)packet).getSocketID();
+		peer.setSocketID(peerSocketID);
+		session.received(packet,peer);
 	}
 
 	protected void doSend(UDTPacket packet)throws IOException{
@@ -327,4 +327,5 @@ public class UDPEndPoint {
 	public void sendRaw(DatagramPacket p)throws IOException{
 		dgSocket.send(p);
 	}
+
 }

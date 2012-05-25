@@ -32,6 +32,9 @@
 
 package udt.packets;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+
 
 public class PacketUtil {
 
@@ -80,4 +83,30 @@ public class PacketUtil {
 		return result;
 	}
 
+	/**
+	 * encodes the specified address into 128 bit
+	 * @param address - inet address
+	 */
+	public static byte[] encode(InetAddress address){
+		byte[]res=new byte[16];
+		byte[]add=address.getAddress();
+		System.arraycopy(add, 0, res, 0, add.length);
+		return res;
+	}
+	
+	public static InetAddress decodeInetAddress(byte[]data, int start, boolean ipV6)throws UnknownHostException{
+		InetAddress result=null;
+		byte[] add=ipV6?new byte[16]:new byte[4];
+		System.arraycopy(data, start, add, 0, add.length);
+		result=InetAddress.getByAddress(add);
+		return result;
+	}
+	
+	public static void print(byte[]arr){
+		System.out.print("[");
+		for(byte b: arr){
+			System.out.print(" "+(b&0xFF));
+		}
+		System.out.println(" ]");
+	}
 }

@@ -196,9 +196,14 @@ public class UDTReceiver {
 
 	//starts the sender algorithm
 	private void start(){
+		
 		Runnable r=new Runnable(){
 			public void run(){
 				try{
+					while(session.getSocket()==null)Thread.sleep(100);
+					session.getSocket().getInputStream();
+					
+					logger.info("STARTING RECEIVER for "+session);
 					nextACK=Util.getCurrentTime()+ackTimerInterval;
 					nextNAK=(long)(Util.getCurrentTime()+1.5*nakTimerInterval);
 					nextEXP=Util.getCurrentTime()+2*expTimerInterval;
@@ -224,6 +229,9 @@ public class UDTReceiver {
 	 */
 	protected void receive(UDTPacket p)throws IOException{
 		if(storeStatistics)dgReceiveInterval.end();
+		if(!p.isControlPacket()){
+			System.out.println("++ "+p+" queuesize="+handoffQueue.size());
+		}
 		handoffQueue.offer(p);
 		if(storeStatistics)dgReceiveInterval.begin();
 	}
@@ -265,6 +273,7 @@ public class UDTReceiver {
 					needEXPReset=true;
 				}
 			}
+			
 			if(needEXPReset){
 				nextEXP=Util.getCurrentTime()+expTimerInterval;
 			}

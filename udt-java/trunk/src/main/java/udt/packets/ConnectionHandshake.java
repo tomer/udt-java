@@ -33,6 +33,8 @@
 package udt.packets;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.net.InetAddress;
 
 import udt.UDTSession;
 
@@ -49,9 +51,14 @@ public class ConnectionHandshake extends ControlPacket {
 	private long packetSize;
 	private long maxFlowWndSize;
 	
-	public static final long CONNECTION_TYPE_REGULAR=1;
+	public static final long CONNECTION_TYPE_REGULAR=1L;
 	
-	public static final long CONNECTION_TYPE_RENDEZVOUS=0;
+	public static final long CONNECTION_TYPE_RENDEZVOUS=0L;
+	
+	/**
+	 * connection type in response handshake packet
+	 */
+	public static final long CONNECTION_SERVER_ACK=-1L;
 	
 	private long connectionType = CONNECTION_TYPE_REGULAR;//regular or rendezvous mode
 	
@@ -59,11 +66,14 @@ public class ConnectionHandshake extends ControlPacket {
 	
 	private long cookie=0;
 	
+	//address of the UDP socket
+	private InetAddress address;
+	
 	public ConnectionHandshake(){
 		this.controlPacketType=ControlPacketType.CONNECTION_HANDSHAKE.ordinal();
 	}
 	
-	public ConnectionHandshake(byte[]controlInformation){
+	public ConnectionHandshake(byte[]controlInformation)throws IOException{
 		this();
 		decode(controlInformation);
 	}
@@ -73,7 +83,7 @@ public class ConnectionHandshake extends ControlPacket {
 		return true;
 	}
 	
-	void decode(byte[]data){
+	void decode(byte[]data)throws IOException{
 		udtVersion =PacketUtil.decode(data, 0);
 		socketType=PacketUtil.decode(data, 4);
 		initialSeqNo=PacketUtil.decode(data, 8);
@@ -81,9 +91,9 @@ public class ConnectionHandshake extends ControlPacket {
 		maxFlowWndSize=PacketUtil.decode(data, 16);
 		connectionType=PacketUtil.decode(data, 20);
 		socketID=PacketUtil.decode(data, 24);
-		if(data.length>28){
-			cookie=PacketUtil.decode(data, 28);
-		}
+		cookie=PacketUtil.decode(data, 28);
+		//TODO ipv6 check
+		address=PacketUtil.decodeInetAddress(data, 32, false);
 	}
 
 	public long getUdtVersion() {
@@ -134,11 +144,25 @@ public class ConnectionHandshake extends ControlPacket {
 	public void setSocketID(long socketID) {
 		this.socketID = socketID;
 	}
+	public long getCookie() {
+		return cookie;
+	}
+	public void setCookie(long cookie) {
+		this.cookie = cookie;
+	}
 	
+	public InetAddress getAddress() {
+		return address;
+	}
+
+	public void setAddress(InetAddress address) {
+		this.address = address;
+	}
+
 	@Override
 	public byte[] encodeControlInformation(){
 		try {
-			ByteArrayOutputStream bos=new ByteArrayOutputStream(24);
+			ByteArrayOutputStream bos=new ByteArrayOutputStream(48);
 			bos.write(PacketUtil.encode(udtVersion));
 			bos.write(PacketUtil.encode(socketType));
 			bos.write(PacketUtil.encode(initialSeqNo));
@@ -146,6 +170,8 @@ public class ConnectionHandshake extends ControlPacket {
 			bos.write(PacketUtil.encode(maxFlowWndSize));
 			bos.write(PacketUtil.encode(connectionType));
 			bos.write(PacketUtil.encode(socketID));
+			bos.write(PacketUtil.encode(cookie));
+			bos.write(PacketUtil.encode(address));
 			return bos.toByteArray();
 		} catch (Exception e) {
 			// can't happen
@@ -178,6 +204,10 @@ public class ConnectionHandshake extends ControlPacket {
 			return false;
 		if (udtVersion != other.udtVersion)
 			return false;
+		if (cookie!=other.cookie)
+			return false;
+		if (!address.equals(other.address))
+			return false;
 		return true;
 	}
 	
@@ -198,6 +228,7 @@ public class ConnectionHandshake extends ControlPacket {
 		sb.append(", socketType=").append(socketType);
 		sb.append(", destSocketID=").append(destinationID);
 		if(cookie>0)sb.append(", cookie=").append(cookie);
+		sb.append(", address=").append(address);
 		sb.append("]");
 		return sb.toString();
 	}

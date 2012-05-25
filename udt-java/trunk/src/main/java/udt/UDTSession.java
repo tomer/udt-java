@@ -39,6 +39,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import udt.packets.Destination;
+import udt.util.SequenceNumber;
 import udt.util.UDTStatistics;
 
 public abstract class UDTSession {
@@ -53,9 +54,9 @@ public abstract class UDTSession {
 	//state constants	
 	public static final int start=0;
 	public static final int handshaking=1;
-	public static final int ready=2;
-	public static final int keepalive=3;
-	public static final int shutdown=4;
+	public static final int ready=50;
+	public static final int keepalive=80;
+	public static final int shutdown=90;
 	
 	public static final int invalid=99;
 
@@ -70,6 +71,9 @@ public abstract class UDTSession {
 	//cache dgPacket (peer stays the same always)
 	private DatagramPacket dgPacket;
 
+	//session cookie created during handshake
+	protected long sessionCookie=0;
+	
 	/**
 	 * flow window size, i.e. how many data packets are
 	 * in-flight at a single time
@@ -209,7 +213,7 @@ public abstract class UDTSession {
 	
 	public synchronized long getInitialSequenceNumber(){
 		if(initialSequenceNumber==null){
-			initialSequenceNumber=1l; //TODO must be random?
+			initialSequenceNumber=SequenceNumber.random();
 		}
 		return initialSequenceNumber;
 	}

@@ -31,6 +31,7 @@
  *********************************************************************************/
 
 package udt;
+
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
@@ -38,8 +39,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 
-
 public class UDTServerSocket {
+	
 	private static final Logger logger=Logger.getLogger(UDTClient.class.getName());
 	
 	private final UDPEndPoint endpoint;

@@ -151,7 +151,7 @@ public class UDTSender {
 	 * start the sender thread
 	 */
 	public void start(){
-		logger.info("Starting sender for "+session);
+		logger.info("STARTING SENDER for "+session);
 		startLatch.countDown();
 		started=true;
 	}

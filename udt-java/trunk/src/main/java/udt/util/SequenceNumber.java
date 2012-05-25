@@ -13,7 +13,7 @@ public class SequenceNumber {
 
 	private final static long maxSequenceNo=0x7FFFFFFF;
 
-
+	private final static Random rand=new Random();
 	/**
 	 * compare seq1 and seq2. Returns zero, if they are equal, a negative value if seq1 is smaller than
 	 * seq2, and a positive value if seq1 is larger than seq2.
@@ -67,7 +67,7 @@ public class SequenceNumber {
 	 * generates a random number between 1 and 0x3FFFFFFF (inclusive)
 	 */
 	public static long random(){
-		return 1+new Random().nextInt(maxOffset);
+		return 1+rand.nextInt(maxOffset);
 	}
 	
 }
